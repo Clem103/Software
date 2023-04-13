@@ -26,7 +26,7 @@
 #           - User input : 0, 1 and 2
 # List of inputs : Mode (values 0, 1 or 2)
 # List of outputs : Graphical plots of trajectory in the fixed reference frame (x,y), speed over time in the fixed reference frame, 
-#                   altitude (distance from the surface of the Earth) over time of the rocket, pitch angle over time (for mode 0 and 2 in the mobile frame of reference, for mode 1 in the fixed reference frame)
+#                   altitude (distance from the surface of the Earth) over time of the rocket, pitch angle over time (for mode 0 in the mobile frame of reference, for mode 1 and 2 in the fixed reference frame)
 # Package requirements and versions :
 # - Numpy 1.24.2
 # - Matplotlib 3.7.1
@@ -37,13 +37,30 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-############ Environnement parameters ############
+
+
+###################################################### User modifiable parameters #########################################################################################
+
+# Simulation parameters
+
+end_time = 4000                 # End time in seconds
+dt = 0.1                        # Time step for integration method in seconds
+pitch_slope_time = 2000         # Only in mode 0 : Time in seconds during which the pitch angle is linearly increased from vertical to horizontal (in mobile reference frame) 
+init_pitch_diff = 1e-8          # Only in mode 1 : Initial pitch angle difference between the vertical axis and the rocket in the fixed reference frame (in radians) (used to initiate gravity turn) 
+constant_pitch = np.pi/4        # Only in mode 2 : Constant pitch angle between horizontal axis and the rocket in the fixed reference frame (in radians)
+
+######################################################## End of user modifiable parameters ###############################################################################
+
+
+##### Environnement parameters #####
 
 g0 = 9.80665             # In m/s^2
 earth_radius = 6.378e6   # In meters, initially the rocket is on the earth surface
 
 
-############ Parameters of the rocket (Ariane 5G data from Ariane 5 User Manual and Nasa technical Data Sheet) ############
+##### Parameters of the rocket #####
+# Based on Ariane 5G data from Ariane 5 User Manual and Nasa technical Data Sheet
+
 total_mass = np.array([268e3*2,170e3, 10.9e3])               # Initial total mass of each stage in kg
 prop_mass = np.array([237e3*2, 158e3, 9.7e3])                # Initial propellant mass of each stage in kg
 struct_mass = np.copy(total_mass-prop_mass)                  # Structure mass of each stage in kg
@@ -55,88 +72,42 @@ max_n_stage = 2                                              # Number of stages 
 burn_time = np.sum(prop_mass/m_dot)                          # Burn time in seconds
 
 
-############ Simulation parameters ############
-# Can be safely modified by the user #
+##### Definition of functions #####
 
-end_time = 3000                 # End time in seconds
-dt = 0.1                        # Time step for integration method in seconds
-pitch_slope_time = 2000         # MODE 0 : Time in seconds during which the pitch angle is linearly increased from vertical to horizontal (in mobile reference frame) 
-init_pitch_diff = 1e-8          # MODE 1 : Initial pitch angle difference between the vertical axis and the rocket in the fixed reference frame (in radians) (used to initiate gravity turn) 
-constant_pitch = -np.pi/8       # MODE 2 : Constant pitch angle between the vertical axis and the rocket in the mobile frame of reference (in radians)
-
-
-def compute_accel_mobile(beta, current_stage, current_step):
-    """
-    Computes the acceleration of the rocket in the mobile frame of reference (r,beta) and returns it in the fixed reference frame (x,y)
-    Inputs : 
-        - beta : angle between mobile frame of reference origin and fixed reference frame origin (in radians)
-        - current_stage : current stage of the rocket (0 to max_n_stage)
-        - current_step : current step of the simulation (0 to end_time/dt)
-    Outputs :
-        - accel_fixed_frame : vector acceleration of the rocket in the fixed reference frame (x,y) (in m/s^2)
-    """
-
-    # Numpy rotation matrix from mobile frame to fixed frame with accel_fixed_frame = rotation_matrix @ accel_mobile_frame
-    rotation_matrix = np.array([[np.cos(beta), -np.sin(beta)],
-                                [np.sin(beta), np.cos(beta)]])
-
-    if prop_mass[current_stage]>=0:
-        # In the mobile frame of reference of the rocket
-
-        # Acceleration due to thrust and gravity only (no air drag)
-        accel_r = thrust[current_stage]/np.sum(total_mass) * np.cos(pitch_angle_tab[current_step]) - g0
-        accel_beta = thrust[current_stage]/np.sum(total_mass) * np.sin(pitch_angle_tab[current_step])
-
-        accel_mobile_frame = np.array([accel_r, accel_beta])
-        accel_fixed_frame = rotation_matrix @ accel_mobile_frame
-    
-    else:
-
-        accel_r = -g0
-        accel_beta = 0
-
-        accel_mobile_frame = np.array([accel_r, accel_beta])
-        accel_fixed_frame = rotation_matrix @ accel_mobile_frame
-
-    return accel_fixed_frame
-
-def compute_accel_fixed(beta, current_stage, pitch_angle):
+def compute_accel(beta, current_stage, current_step, pitch_angle):
     """
     Computes the acceleration of the rocket in the fixed reference frame (x,y)
-    Important note : In this mode, pitch angle is the computed between the rocket thrust vector and the horizontal axis in the fixed reference frame
+    Important note : The pitch angle is the angle between the rocket thrust vector and the horizontal axis in the fixed reference frame
 
     Inputs :
         - beta : angle between mobile frame of reference origin and fixed reference frame origin (in radians)
         - current_stage : current stage of the rocket (0 to max_n_stage)
         - pitch_angle : pitch angle between the rocket thrust vector and the horizontal axis in the fixed reference frame (in radians)
     Outputs :
-        - accel_fixed_frame : vector acceleration of the rocket in the fixed reference frame (x,y) (in m/s^2)
+        - accel : vector acceleration of the rocket in the fixed reference frame (x,y) (in m/s^2)
     """
 
-    # Numpy rotation matrix from mobile frame to fixed frame with vector_in_fixed_frame = rotation_matrix @ vector_in_mobile_frame
-    rotation_matrix_mobile_to_fixed = np.array([[np.cos(beta), -np.sin(beta)],
-                                                [np.sin(beta), np.cos(beta)]])
-    gravity_accel = rotation_matrix_mobile_to_fixed @ np.array([g0,0])         # In the fixed reference frame (x,y)
+    gravity_accel = np.array([-g0*np.cos(beta),-g0*np.sin(beta)])
+    thrust_accel = np.array([thrust[current_stage]/np.sum(total_mass) * np.cos(pitch_angle), thrust[current_stage]/np.sum(total_mass) * np.sin(pitch_angle)])
 
 
-    if prop_mass[current_stage]>=0:
+    if current_step<=burn_time/dt:
         # In the fixed reference frame
 
         # Acceleration due to thrust and gravity only (no air drag)
-        accel_x = thrust[current_stage]/np.sum(total_mass) * np.cos(pitch_angle) - gravity_accel[0]
-        accel_y = thrust[current_stage]/np.sum(total_mass) * np.sin(pitch_angle) - gravity_accel[1]
+        accel_x = thrust_accel[0] + gravity_accel[0]
+        accel_y = thrust_accel[1] + gravity_accel[1]
 
     
     else:
         # In the fixed reference frame
 
-        accel_x = - gravity_accel[0]
-        accel_y = - gravity_accel[1]
+        accel_x = gravity_accel[0]
+        accel_y = gravity_accel[1]
 
-    accel_fixed_frame = np.array([accel_x, accel_y])
+    accel = np.array([accel_x, accel_y])
 
-    return accel_fixed_frame
-
+    return accel
 
 def compute_r(x,y):
     """Computes the distance from the center of the earth to the rocket
@@ -208,9 +179,7 @@ def compute_GT_pitch_angle(v):
     return np.arctan2(v[1],v[0])
 
 
-    
-
-############ Initialisation of the simulation ##############
+##### Initialisation of the simulation #####
 
 # Mode choice
 mode = 0
@@ -229,14 +198,15 @@ alt_tab = []                                            # Altitude array of the 
 v=np.array([0,0])                                       # Current speed of the rocket in the fixed reference frame (x,y), initially set to 0
 pos=np.array([0,earth_radius])                          # Current position of the rocket in the fixed reference frame (x,y), initially set to the earth surface
 n_stage = 0                                             # Current stage of the rocket
+beta = np.pi/2                                          # Current angle between the rocket and the horizontal axis in the fixed reference frame (in radians)
 
-############ Simulation ############
+##### Simulation #####
 
 if mode == 0:
 
     ## Pitch angle control law ##
-    ## Note : Pitch angle is computed in the mobile frame of reference (r,beta) with 0 radian = toward orthoradial direction in the trigonometric direction 
-    ## And + pi/2 radian = toward radial direction in the trigonometric direction
+    ## Note : Pitch angle is computed in the mobile frame of reference (r,beta) with 0 radian = toward radial direction in the trigonometric direction 
+    ## And + pi/2 radian = toward orthoradial direction in the trigonometric direction
 
     pitch_angle_tab1 = np.linspace(0, -np.pi/2,int(np.floor(pitch_slope_time/dt)))    # Pitch angle tab for the "slope" part of the control law
     pitch_angle_tab = np.append(pitch_angle_tab1, -np.pi/2*(np.ones(int(len(time_tab)-len(pitch_angle_tab1)))))   # Pitch angle tab for the constant pitch angle part of the control law
@@ -257,7 +227,7 @@ if mode == 0:
             
             alt = compute_alt(r)
             beta = compute_beta(pos[0], pos[1])
-            a = compute_accel_mobile(beta, n_stage, k)
+            a = compute_accel(beta, n_stage, k, pitch_angle_tab[k]+beta)
             v = compute_speed(v, a, dt)
             pos = compute_pos(pos, v, dt)
 
@@ -297,7 +267,7 @@ elif mode == 1:
             
             alt = compute_alt(r)
             beta = compute_beta(pos[0], pos[1])
-            a = compute_accel_fixed(beta, n_stage, pitch_angle)
+            a = compute_accel(beta, n_stage, k, pitch_angle)
             v = compute_speed(v, a, dt)
             pitch_angle = compute_GT_pitch_angle(v)
             pos = compute_pos(pos, v, dt)
@@ -337,7 +307,7 @@ elif mode == 2:
             
             alt = compute_alt(r)
             beta = compute_beta(pos[0], pos[1])
-            a = compute_accel_mobile(beta, n_stage, k)
+            a = compute_accel(beta, n_stage, k, pitch_angle_tab[k])
             v = compute_speed(v, a, dt)
             pos = compute_pos(pos, v, dt)
 
@@ -402,4 +372,13 @@ ax4.set_xlabel('Time (s)')
 ax4.set_ylabel('Pitch angle (rad)')
 ax4.set_title('Pitch angle')
 ax4.grid()
+
+plt.figure()
+plt.plot(time_tab[:len(v_tab)], M_tab[:len(v_tab)], label='Mass')
+plt.legend()
+plt.xlabel('Time (s)')
+plt.ylabel('Mass (kg)')
+plt.title('Total mass')
+plt.grid()
+
 plt.show()
