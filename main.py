@@ -1,5 +1,5 @@
 # Name : Rocket trajectory simulator
-# Current version number : 4.0
+# Current version number : 4.1
 # Author : Clément Vellu
 # Initial coding : 20/03/2023
 # Description : This program simulates the trajectory of a rocket lauching from surface of Earth using Euler's integration scheme. 
