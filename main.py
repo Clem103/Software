@@ -1,8 +1,8 @@
 # Name : Rocket trajectory simulator
-# Current version number : 4.1
+# Current version number : 4.2
 # Author : Clément Vellu
 # Initial coding : 20/03/2023
-# Description : This program simulates the trajectory of a rocket lauching from surface of Earth using Euler's integration scheme. 
+# Description : This program simulates the trajectory of a rocket launching from surface of Earth using Euler's integration scheme. 
 #               The rocket modelled is Ariane 5 rocket with 3 stages
 #               The simulator can be used in three modes : linearly increasing pitch angle, gravity turn, constant pitch angle
 # Algorithm used : Euler integration scheme (coded from scratch)
@@ -179,7 +179,7 @@ def compute_GT_pitch_angle(v):
     return np.arctan2(v[1],v[0])
 
 
-##### Initialisation of the simulation #####
+##### Initialization of the simulation #####
 
 # Mode choice
 mode = 0
@@ -189,7 +189,7 @@ print("1 : Simulation with gravity turn only")
 print("2 : Simulation with constant pitch angle")
 mode = int(input("Mode : "))
 
-# Initialisation of the variables
+# Initialization of the variables
 time_tab = np.linspace(0,end_time, int(end_time/dt))    # Discretized time array
 pos_tab = []                                            # Position array of the rocket in the fixed reference frame (x,y)
 v_tab = []                                              # Speed array of the rocket in the fixed reference frame (x,y) 
